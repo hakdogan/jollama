@@ -18,16 +18,25 @@ public class JollamaClient {
 
     public static HttpResponse<InputStream> sendRequest(final String model,
                                                         final String prompt,
-                                                        final List<Integer> context) throws IOException, InterruptedException {
-        String requestBody = requestInitiator(model, prompt, context);
-        HttpRequest request = requestBuilder("generate", requestBody);
+                                                        final List<Integer> context) {
 
-        return HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        try {
+            String requestBody = requestInitiator(model, prompt, context);
+            HttpRequest request = requestBuilder("generate", requestBody);
+
+            return HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    public static HttpResponse<InputStream> listModels() throws IOException, InterruptedException {
-        HttpRequest request = requestBuilder("tags");
-        return HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
+    public static HttpResponse<InputStream> listModels() {
+        try {
+            HttpRequest request = requestBuilder("tags");
+            return HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static HttpRequest requestBuilder(final String endpoint, String... requestBody){
