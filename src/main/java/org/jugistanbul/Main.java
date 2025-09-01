@@ -18,6 +18,9 @@ import java.util.regex.Pattern;
  ***/
 public class Main {
 
+    private static final String SPECIFY_MODEL = "%nBefore you begin, please specify the model you want to use.%n(Type \"models\" to list local models)%n";
+    private static final String ASK_ANYTHING = "%nAsk anything. Type \"exit\" to exit!%n";
+
     private static final Pattern RESPONSE_PATTERN = Pattern.compile("\"response\":\"(.*?)\"");
     private static final Pattern CONTEXT_PATTERN = Pattern.compile("\"context\":\\[(.*?)\\]");
     private static final Pattern MODEL_PATTERN = Pattern.compile("\"model\"\\s*:\\s*\"([^\"]+)\"");
@@ -32,57 +35,45 @@ public class Main {
         var scanner = new Scanner(System.in);
         List<Integer> context = new ArrayList<>();
 
-        System.out.printf("%nBefore you begin, please specify the model you want to use.%n(Type \"models\" to list local models)%n");
-
+        System.out.printf(SPECIFY_MODEL);
         String model;
-        String userInput = scanner.nextLine();
-
-        if("models".equals(userInput)) {
-            HttpResponse<InputStream> response = JollamaClient.listModels();
-            printModels(response);
-            model = scanner.nextLine();
-        } else {
-            model = userInput;
-        }
-
-        System.out.printf("%nAsk anything. Type \"exit\" to exit!%n");
 
         while (true) {
-            var prompt = scanner.nextLine();
 
-            if("exit".equals(prompt)){
-                break;
+            model  = scanner.nextLine();
+            isExitRequest(model);
+
+            if("models".equals(model)) {
+                HttpResponse<InputStream> response = JollamaClient.listModels();
+                printModels(response);
+                model = scanner.nextLine();
             }
 
+            if(isModelAvailable(model)){
+                break;
+            }
+        }
+
+        System.out.printf(ASK_ANYTHING);
+
+        while (true) {
+
+            var prompt = scanner.nextLine();
+            if(prompt.isBlank() || prompt.trim().length() == 0) {
+                System.out.printf(ASK_ANYTHING);
+                continue;
+            }
+
+            isExitRequest(prompt);
+
             HttpResponse<InputStream> response = JollamaClient.sendRequest(model, prompt, context);
+            if(response.statusCode() != 200){
+                errorHandler(response);
+            }
+
             printResponse(response, context);
             System.out.printf("%nGot a new question?%n");
 
-        }
-    }
-
-    private static void printModels(final HttpResponse<InputStream> response) throws IOException {
-
-        try (var reader = new BufferedReader(new InputStreamReader(response.body()))) {
-            StringBuilder rawJson = new StringBuilder();
-            String line;
-
-            while ((line = reader.readLine()) != null) {
-                errorHandler(line);
-                rawJson.append(line);
-            }
-
-            var jsonContent = rawJson.toString();
-            Matcher matcher = MODEL_PATTERN.matcher(jsonContent);
-
-            while (matcher.find()) {
-                String fullModelName = matcher.group(1);
-                String[] parts = fullModelName.split(":");
-                String baseModelName = parts.length > 0 ? parts[0] : fullModelName;
-                System.out.println(baseModelName);
-            }
-
-            System.out.printf("%nPlease specify the model you want to use.%n");
         }
     }
 
@@ -110,6 +101,29 @@ public class Main {
         }
     }
 
+    private static boolean isModelAvailable(final String model) {
+
+        HttpResponse<InputStream> response = JollamaClient.listModels();
+        boolean found = findModel(model, response);
+
+        if(!found){
+            System.out.printf("model '%s' not found", model);
+            System.out.printf(SPECIFY_MODEL);
+        }
+
+        return found;
+    }
+
+    private static boolean findModel(final String model,
+                                     final HttpResponse<InputStream> response){
+        return getModels(response).stream().anyMatch(model::equals);
+    }
+
+    private static void printModels(final HttpResponse<InputStream> response) throws IOException {
+        getModels(response).forEach(System.out::println);
+        System.out.printf("%nPlease specify the model you want to use.%n");
+    }
+
     private static void printResponse(final HttpResponse<InputStream> response,
                                       final List<Integer> context) throws Exception {
 
@@ -118,7 +132,6 @@ public class Main {
         try (var reader = new BufferedReader(new InputStreamReader(response.body()))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                errorHandler(line);
                 rawJson.append(line);
                 Matcher matcher = RESPONSE_PATTERN.matcher(line);
                 if (matcher.find()) {
@@ -131,12 +144,20 @@ public class Main {
         contextAppender(rawJson.toString(), context);
     }
 
-    private static void errorHandler(final String line){
+    private static void errorHandler(final HttpResponse<InputStream> response) {
 
-        Matcher error = ERROR_PATTERN.matcher(line);
-        if (error.find()) {
-            System.out.println(error.group(1));
-            System.exit(-1);
+        try (var reader = new BufferedReader(new InputStreamReader(response.body()))) {
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                Matcher error = ERROR_PATTERN.matcher(line);
+                if (error.find()) {
+                    System.out.println(error.group(1));
+                    System.exit(-1);
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -151,6 +172,41 @@ public class Main {
                     context.add(Integer.parseInt(token.trim()));
                 }
             }
+        }
+    }
+
+    private static List<String> getModels(final HttpResponse<InputStream> response){
+
+        var models = new ArrayList<String>();
+
+        try (var reader = new BufferedReader(new InputStreamReader(response.body()))) {
+            var rawJson = new StringBuilder();
+            String line;
+
+            while ((line = reader.readLine()) != null) {
+                rawJson.append(line);
+            }
+
+            var jsonContent = rawJson.toString();
+            Matcher matcher = MODEL_PATTERN.matcher(jsonContent);
+
+            while (matcher.find()) {
+                String fullModelName = matcher.group(1);
+                String[] parts = fullModelName.split(":");
+                String baseModelName = parts.length > 0 ? parts[0] : fullModelName;
+                models.add(baseModelName);
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        return models;
+    }
+
+    private static void isExitRequest(final String prompt){
+        if("exit".equals(prompt)){
+            System.exit(0);
         }
     }
 }
