@@ -57,10 +57,33 @@ java -jar jollama.jar
 or
 
 ```bash
-sh run.rsh
+sh run.sh
 ```
 
-If you want to configure a model, you must provide the model name and model file path
+To list local models, you can type **models** after the following message is displayed in the console
+
+```bash
+Before you begin, please specify the model you want to use.
+(Type "models" to list local models)
+
+models
+
+gpt-oss
+qwen2.5
+phi3.5
+phi3
+all-minilm
+qwen3
+nomic-embed-text
+llava
+qwen2.5
+llama3.2
+qwen2.5
+mistral
+
+Please specify the model you want to use.
+```
+If you want to configure a model, you must provide the **model name** and **model file path**
 
 ```bash
 java -jar jollama.jar java-expert src/main/resources/Modelfile
@@ -76,6 +99,8 @@ success
 
 Model created successfully: java-expert
 Before you begin, please specify the model you want to use.
+(Type "models" to list local models)
+
 java-expert
 
 Ask anything. Type exit to exit!
